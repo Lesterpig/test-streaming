@@ -21,46 +21,64 @@ function initMic() {
         audio: true,
         video: false
     };
-    var recordRTC = null;
+
     navigator.getUserMedia(session, function(stream) {
 
-        var context = new AudioContext();
-        var audioInput = context.createMediaStreamSource(stream);
+        var audioInput = micContext.createMediaStreamSource(stream);
         var bufferSize = 4096;
-        // create a javascript node
-        var recorder = context.createScriptProcessor(bufferSize, 1, 1);
-        // specify the processing function
+        var recorder = micContext.createScriptProcessor(bufferSize, 1, 1);
         recorder.onaudioprocess = (function(e) {
 
             var buffer = e.inputBuffer;
             var floatChunk = buffer.getChannelData(0).buffer;
+            bytesUp += floatChunk.byteLength;
 
             socket.emit("upChunk", floatChunk);
 
         });
-        // connect stream to our recorder
-        audioInput.connect(recorder);
-        // connect our recorder to the previous destination
-        recorder.connect(context.destination);
 
-        //ss(socket).emit('upStream', upStream);
-    }, function(e) {});
+        audioInput.connect(recorder);
+
+        recorder.connect(micContext.destination);
+
+    }, function(e) { console.error(e); });
 }
 
 (function(window) {
 
-    window.readContext = new AudioContext();
-    window.socket = io();
 
     window.AudioContext = window.AudioContext || window.webkitAudioContext;
     navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+
+    window.micContext = new AudioContext();
+    window.readContext = new AudioContext();
+    window.socket = io();
+
+    window.bytesUp = 0;
+    window.bytesDown = 0;
 
     socket.on("ready", function() {
         initMic();
     });
 
     socket.on("downChunk", function(rawBuffer) {
+    	bytesDown += rawBuffer.byteLength;
         play(new Float32Array(rawBuffer));
     });
+
+    // Network Trafic Tests
+
+
+    setInterval(function() {
+
+    	var deltaUp   = Math.ceil((bytesUp) / 3000);
+    	var deltaDown = Math.ceil((bytesDown) / 3000);
+
+    	console.log("UP : "+ deltaUp + " ko/s - " +
+    	            "DOWN : "+ deltaDown + " ko/s");
+
+    	bytesUp = 0;
+    	bytesDown = 0;
+    },3000);
 
 })(window);
